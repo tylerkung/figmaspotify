@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Remote for Spotify</title>
+<style>
+  :root {
+    --bg: #121212;
+    --panel: #1c1c1c;
+    --panel-2: #242424;
+    --text: #ffffff;
+    --muted: #b3b3b3;
+    --accent: #1db954;
+    --accent-hover: #1ed760;
+    --border: #2a2a2a;
+    --error: #f15e6c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+  .view { display: none; flex: 1; flex-direction: column; padding: 16px; overflow-y: auto; }
+  .view.active { display: flex; }
+
+  h1, h2, h3 { margin: 0 0 8px 0; font-weight: 600; }
+  h2 { font-size: 16px; }
+  h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  p { margin: 0 0 12px 0; color: var(--muted); line-height: 1.5; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code {
+    background: var(--panel-2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: "SF Mono", Menlo, monospace;
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  label { display: block; font-size: 11px; color: var(--muted); margin: 12px 0 4px; }
+  input[type=text], input[type=url], input[type=search], textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+  }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 60px; }
+
+  button {
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { background: #2f2f2f; }
+  button.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 6px 8px; }
+  button.ghost:hover { color: var(--text); background: var(--panel-2); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.icon {
+    background: transparent;
+    border: none;
+    padding: 6px;
+    border-radius: 50%;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  button.icon:hover { background: var(--panel-2); color: var(--text); }
+  button.icon.big {
+    width: 44px;
+    height: 44px;
+    background: #fff;
+    color: #000;
+  }
+  button.icon.big:hover { transform: scale(1.05); background: #fff; }
+
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row.center { justify-content: center; }
+  .row.between { justify-content: space-between; }
+  .stack { display: flex; flex-direction: column; gap: 8px; }
+
+  .error {
+    background: rgba(241, 94, 108, 0.1);
+    border: 1px solid rgba(241, 94, 108, 0.3);
+    color: var(--error);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    margin-bottom: 8px;
+    word-break: break-word;
+  }
+
+  /* Player */
+  .player {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .album-art {
+    width: 100%;
+    max-width: 260px;
+    aspect-ratio: 1 / 1;
+    margin: 0 auto;
+    background: var(--panel-2);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 11px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .album-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .track-meta { text-align: left; }
+  .track-name { font-size: 15px; font-weight: 700; margin: 0; line-height: 1.2; }
+  .track-artist { font-size: 12px; color: var(--muted); margin: 4px 0 0 0; }
+
+  .progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .progress input[type=range] { flex: 1; }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 4px;
+    background: #404040;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    margin: 0;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: var(--text);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 0;
+  }
+  input[type=range]:hover { background: #505050; }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  .volume {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .volume input[type=range] { flex: 1; }
+
+  /* Search results */
+  .results { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+  .result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .result:hover { background: var(--panel-2); }
+  .result-art {
+    width: 40px;
+    height: 40px;
+    background: var(--panel-2);
+    border-radius: 4px;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  .result-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .result-text { flex: 1; min-width: 0; }
+  .result-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-sub { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .header h2 { display: flex; align-items: center; gap: 8px; }
+  .header-actions { display: flex; gap: 4px; }
+
+  .tabs { display: flex; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+  .tab {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  .tab:hover { color: var(--text); background: transparent; }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .empty { color: var(--muted); text-align: center; padding: 24px 12px; font-size: 12px; }
+
+  .premium-warning {
+    background: rgba(255, 200, 0, 0.08);
+    border: 1px solid rgba(255, 200, 0, 0.25);
+    color: #ffcb47;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+
+  /* Compact mode — single 64px bar with art / title / controls */
+  #compact-bar {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    height: 100%;
+    box-sizing: border-box;
+    background: var(--bg);
+    position: relative;
+  }
+  #compact-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 4px;
+    width: 0%;
+    background: var(--accent);
+    transition: width 0.5s linear;
+  }
+  .compact-art {
+    width: 40px;
+    height: 40px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    background: var(--panel-2);
+    overflow: hidden;
+  }
+  .compact-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .compact-meta { flex: 1; min-width: 0; cursor: pointer; }
+  .compact-title { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .compact-artist { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .compact-controls { display: flex; gap: 0; align-items: center; flex-shrink: 0; }
+  .compact-controls .icon { padding: 4px; }
+  .compact-controls .icon svg { width: 18px; height: 18px; }
+
+  body.compact #view-player .header,
+  body.compact #view-player .tabs,
+  body.compact #device-bar,
+  body.compact #tab-now-playing,
+  body.compact #tab-search,
+  body.compact #player-error { display: none !important; }
+  body.compact #compact-bar { display: flex; }
+  body.compact #view-player { padding: 0; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <!-- ============ SETUP VIEW ============ -->
+    <div id="view-setup" class="view" style="align-items: center; justify-content: center; text-align: center;">
+      <div style="width: 100%; max-width: 280px;">
+        <svg width="56" height="56" viewBox="0 0 168 168" style="margin-bottom: 16px;"><path fill="#1ED760" d="M83.996.277C37.747.277.253 37.77.253 84.019c0 46.251 37.494 83.741 83.743 83.741 46.254 0 83.744-37.49 83.744-83.741 0-46.246-37.49-83.738-83.745-83.738zm38.404 120.78a5.217 5.217 0 01-7.18 1.73c-19.662-12.01-44.414-14.73-73.564-8.07a5.222 5.222 0 01-6.249-3.93 5.213 5.213 0 013.926-6.25c31.9-7.291 59.263-4.15 81.337 9.34 2.46 1.51 3.24 4.72 1.73 7.18zm10.25-22.805c-1.89 3.075-5.91 4.045-8.98 2.155-22.51-13.839-56.823-17.846-83.448-9.764-3.453 1.043-7.1-.903-8.148-4.35-1.04-3.453.907-7.093 4.354-8.143 30.413-9.228 68.222-4.758 94.072 11.127 3.07 1.89 4.04 5.91 2.15 8.976zm.88-23.744c-26.99-16.031-71.52-17.505-97.289-9.684-4.138 1.255-8.514-1.081-9.768-5.219a7.835 7.835 0 015.221-9.771c29.581-8.98 78.756-7.245 109.83 11.202a7.823 7.823 0 012.74 10.733c-2.2 3.722-7.02 4.949-10.73 2.739z"/></svg>
+        <h2>Connect Spotify</h2>
+        <p>Control Spotify playback from inside Figma.</p>
+
+        <div id="setup-error" class="error" style="display:none; margin: 12px 0; text-align: left;"></div>
+
+        <button id="setup-signin" class="primary" style="margin-top: 8px;">Sign in with Spotify</button>
+
+        <p style="margin-top: 16px; font-size: 11px;">
+          <a href="#" id="setup-toggle-config" style="color: var(--muted);">Use a different Spotify app</a>
+        </p>
+
+        <!-- Hidden by default; shown when no Client ID is configured, or by toggle -->
+        <div id="setup-config" style="display:none; margin-top: 16px; text-align: left;">
+          <p style="font-size: 11px; color: var(--muted);">Provide your own Spotify app Client ID. Register at <a href="#" id="open-spotify-dashboard">developer.spotify.com/dashboard</a> with redirect URI <code>https://example.com/callback</code>.</p>
+          <label for="client-id">Client ID</label>
+          <input type="text" id="client-id" placeholder="e.g. 1a2b3c4d5e6f...">
+          <div class="row" style="margin-top: 12px;">
+            <button id="setup-save" class="primary">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ AUTH VIEW ============ -->
+    <div id="view-auth" class="view">
+      <h2>Sign in to Spotify</h2>
+      <p>A Spotify login window just opened. Approve access there — Figma will detect the connection automatically and the popup will close on its own.</p>
+
+      <div id="auth-error" class="error" style="display:none; margin-top: 8px;"></div>
+
+      <div class="row" style="margin-top: 12px;">
+        <button id="auth-reopen" class="ghost">Re-open Spotify login</button>
+        <button id="auth-back" class="ghost">Cancel</button>
+      </div>
+
+      <details style="margin-top: 24px;">
+        <summary style="color: var(--muted); font-size: 11px; cursor: pointer;">Popup didn't close? Paste the callback URL manually</summary>
+        <p style="font-size: 11px; margin-top: 8px;">If the popup got stuck or closed before Figma noticed, copy the full URL from its address bar and paste it here.</p>
+        <textarea id="callback-url" placeholder="https://tylerkung.github.io/figmaspotify/callback.html?code=AQD..."></textarea>
+        <div class="row" style="margin-top: 8px;">
+          <button id="auth-submit" class="primary">Continue</button>
+        </div>
+      </details>
+    </div>
+
+    <!-- ============ PLAYER VIEW ============ -->
+    <div id="view-player" class="view" style="padding: 0;">
+      <!-- Compact bar (visible only when body.compact) -->
+      <div id="compact-bar">
+        <div class="compact-art" id="compact-art"></div>
+        <div class="compact-meta" id="compact-meta" title="Expand">
+          <div class="compact-title" id="compact-title">—</div>
+          <div class="compact-artist" id="compact-artist"></div>
+        </div>
+        <div class="compact-controls">
+          <button class="icon" id="cmp-prev" title="Previous">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></svg>
+          </button>
+          <button class="icon" id="cmp-playpause" title="Play / Pause">
+            <svg id="cmp-icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg id="cmp-icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+          </button>
+          <button class="icon" id="cmp-next" title="Next">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+          </button>
+          <button class="icon" id="cmp-expand" title="Expand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+        <div id="compact-progress"></div>
+      </div>
+
+      <div class="header">
+        <h2>
+          <svg width="16" height="16" viewBox="0 0 168 168" fill="none"><path fill="#1ED760" d="M83.996.277C37.747.277.253 37.77.253 84.019c0 46.251 37.494 83.741 83.743 83.741 46.254 0 83.744-37.49 83.744-83.741 0-46.246-37.49-83.738-83.745-83.738zm38.404 120.78a5.217 5.217 0 01-7.18 1.73c-19.662-12.01-44.414-14.73-73.564-8.07a5.222 5.222 0 01-6.249-3.93 5.213 5.213 0 013.926-6.25c31.9-7.291 59.263-4.15 81.337 9.34 2.46 1.51 3.24 4.72 1.73 7.18zm10.25-22.805c-1.89 3.075-5.91 4.045-8.98 2.155-22.51-13.839-56.823-17.846-83.448-9.764-3.453 1.043-7.1-.903-8.148-4.35-1.04-3.453.907-7.093 4.354-8.143 30.413-9.228 68.222-4.758 94.072 11.127 3.07 1.89 4.04 5.91 2.15 8.976zm.88-23.744c-26.99-16.031-71.52-17.505-97.289-9.684-4.138 1.255-8.514-1.081-9.768-5.219a7.835 7.835 0 015.221-9.771c29.581-8.98 78.756-7.245 109.83 11.202a7.823 7.823 0 012.74 10.733c-2.2 3.722-7.02 4.949-10.73 2.739z"/></svg>
+          Spotify
+        </h2>
+        <div class="header-actions">
+          <button class="icon" id="btn-compact" title="Compact view">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 15 12 9 18 15"/></svg>
+          </button>
+          <button class="icon" id="btn-devices" title="Devices">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </button>
+          <button class="icon" id="btn-signout" title="Sign out">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="device-bar" style="padding: 4px 16px 8px; font-size: 11px; color: var(--accent);">No device</div>
+
+      <div id="device-picker" style="display:none; position:absolute; inset:0; background: rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index: 10;">
+        <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; width: 88%; max-height: 70%; overflow-y: auto;">
+          <div class="row between" style="margin-bottom: 8px;">
+            <h3 style="margin:0;">Devices</h3>
+            <button class="ghost" id="device-picker-close">Close</button>
+          </div>
+          <div id="device-list" class="results"></div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="now-playing">Now Playing</button>
+        <button class="tab" data-tab="search">Search</button>
+      </div>
+
+      <div id="player-error" style="padding: 0 16px;"></div>
+
+      <!-- Now Playing tab -->
+      <div id="tab-now-playing" class="view active" style="padding: 16px;">
+        <div class="player">
+          <div class="album-art" id="album-art">
+            <span id="album-art-placeholder">No track playing</span>
+          </div>
+          <div class="track-meta">
+            <p class="track-name" id="track-name">—</p>
+            <p class="track-artist" id="track-artist"></p>
+          </div>
+
+          <div class="progress">
+            <span id="progress-current">0:00</span>
+            <input type="range" id="progress-slider" min="0" max="100" value="0">
+            <span id="progress-total">0:00</span>
+          </div>
+
+          <div class="controls">
+            <button class="icon" id="btn-prev" title="Previous">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM9.5 12l8.5 6V6z"/></svg>
+            </button>
+            <button class="icon big" id="btn-playpause" title="Play / Pause">
+              <svg id="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg id="icon-pause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+            </button>
+            <button class="icon" id="btn-next" title="Next">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+            </button>
+          </div>
+
+          <div class="volume">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color: var(--muted);"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.07v7.86A4.49 4.49 0 0016.5 12z"/></svg>
+            <input type="range" id="volume-slider" min="0" max="100" value="60">
+          </div>
+        </div>
+      </div>
+
+      <!-- Search tab -->
+      <div id="tab-search" class="view" style="padding: 16px;">
+        <input type="search" id="search-input" placeholder="Search tracks, artists, albums...">
+        <div id="search-results" class="results"></div>
+      </div>
+    </div>
+
+    <!-- ============ LOADING VIEW ============ -->
+    <div id="view-loading" class="view active" style="align-items:center; justify-content:center;">
+      <p style="color: var(--muted);">Loading…</p>
+    </div>
+  </div>
+
+<script>
+  // ============================================================
+  // Configure once and ship: paste your Spotify Client ID below.
+  // Register a free app at https://developer.spotify.com/dashboard
+  // and set the redirect URI there to match DEFAULT_REDIRECT_URI.
+  // Leave DEFAULT_CLIENT_ID empty to fall back to the in-UI form.
+  // ============================================================
+  const DEFAULT_CLIENT_ID = 'ac064209026c4446ad37a6fbe7d9fa84';
+  const DEFAULT_REDIRECT_URI = 'https://tylerkung.github.io/figmaspotify/callback.html';
+
+  // -------- View routing --------
+  const views = ['setup', 'auth', 'player', 'loading'];
+  function showView(name) {
+    views.forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if (el) el.classList.toggle('active', v === name);
+    });
+  }
+
+  function showError(viewPrefix, message) {
+    const el = document.getElementById(viewPrefix + '-error');
+    if (!el) return;
+    el.textContent = message || '';
+    el.style.display = message ? 'block' : 'none';
+    if (viewPrefix === 'player' && message) {
+      el.innerHTML = `<div class="error">${message}</div>`;
+    }
+  }
+
+  function notify(message, opts) {
+    parent.postMessage({ pluginMessage: { type: 'notify', message, options: opts } }, '*');
+  }
+
+  // -------- App state --------
+  const state = {
+    clientId: '',
+    redirectUri: '',
+    accessToken: '',
+    refreshToken: '',
+    tokenExpiresAt: 0,
+    deviceId: '',
+    deviceName: '',
+    devices: [],
+    currentTrack: null,
+    isPlaying: false,
+    progressMs: 0,
+    durationMs: 0,
+    volume: 60,
+    progressTimer: null,
+    pollTimer: null,
+    seeking: false,
+    volumeDragging: false,
+  };
+
+  // -------- PKCE helpers --------
+  // Figma plugin UIs run from a data: URL, which is NOT a secure context, so
+  // window.crypto.subtle is undefined. We use a pure-JS SHA-256 instead.
+  function randomString(length) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    const arr = new Uint8Array(length);
+    crypto.getRandomValues(arr);
+    let out = '';
+    for (let i = 0; i < length; i++) out += chars[arr[i] % chars.length];
+    return out;
+  }
+
+  const SHA256_K = new Uint32Array([
+    0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+  ]);
+
+  function sha256(text) {
+    const bytes = new TextEncoder().encode(text);
+    const bitLen = bytes.length * 8;
+    const numBlocks = Math.ceil((bytes.length + 9) / 64);
+    const padded = new Uint8Array(numBlocks * 64);
+    padded.set(bytes);
+    padded[bytes.length] = 0x80;
+    const dv = new DataView(padded.buffer);
+    dv.setUint32(padded.length - 4, bitLen >>> 0, false);
+    dv.setUint32(padded.length - 8, Math.floor(bitLen / 0x100000000), false);
+
+    const H = new Uint32Array([
+      0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    ]);
+    const W = new Uint32Array(64);
+    const ROTR = (n, x) => (x >>> n) | (x << (32 - n));
+
+    for (let block = 0; block < numBlocks; block++) {
+      const off = block * 64;
+      for (let i = 0; i < 16; i++) W[i] = dv.getUint32(off + i * 4, false);
+      for (let i = 16; i < 64; i++) {
+        const s0 = ROTR(7, W[i - 15]) ^ ROTR(18, W[i - 15]) ^ (W[i - 15] >>> 3);
+        const s1 = ROTR(17, W[i - 2]) ^ ROTR(19, W[i - 2]) ^ (W[i - 2] >>> 10);
+        W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
+      }
+      let a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (let i = 0; i < 64; i++) {
+        const S1 = ROTR(6, e) ^ ROTR(11, e) ^ ROTR(25, e);
+        const ch = (e & f) ^ (~e & g);
+        const t1 = (h + S1 + ch + SHA256_K[i] + W[i]) | 0;
+        const S0 = ROTR(2, a) ^ ROTR(13, a) ^ ROTR(22, a);
+        const maj = (a & b) ^ (a & c) ^ (b & c);
+        const t2 = (S0 + maj) | 0;
+        h = g; g = f; f = e; e = (d + t1) | 0;
+        d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+
+    const out = new Uint8Array(32);
+    const outDv = new DataView(out.buffer);
+    for (let i = 0; i < 8; i++) outDv.setUint32(i * 4, H[i] >>> 0, false);
+    return out;
+  }
+
+  function base64url(bytes) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  const SCOPES = [
+    'user-read-playback-state',
+    'user-modify-playback-state',
+  ].join(' ');
+
+  let pkceVerifier = '';
+  let authState = '';
+  let authWindow = null;
+
+  async function startAuthFlow() {
+    pkceVerifier = randomString(64);
+    authState = randomString(32);
+    const challenge = base64url(sha256(pkceVerifier));
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: state.clientId,
+      scope: SCOPES,
+      redirect_uri: state.redirectUri,
+      code_challenge_method: 'S256',
+      code_challenge: challenge,
+      state: authState,
+    });
+    const url = 'https://accounts.spotify.com/authorize?' + params.toString();
+    // No `noopener` — we want window.opener to survive in the popup so the
+    // callback page can postMessage the code back automatically.
+    try {
+      authWindow = window.open(url, 'spotify-auth', 'width=520,height=720');
+    } catch (e) {
+      showError('setup', 'Couldn’t open browser: ' + e.message);
+      return;
+    }
+    showView('auth');
+  }
+
+  async function exchangeCodeForToken(code) {
+    const body = new URLSearchParams({
+      client_id: state.clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: state.redirectUri,
+      code_verifier: pkceVerifier,
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error('Token exchange failed: ' + text);
+    }
+    const data = await resp.json();
+    state.accessToken = data.access_token;
+    state.refreshToken = data.refresh_token;
+    state.tokenExpiresAt = Date.now() + (data.expires_in - 30) * 1000;
+    parent.postMessage({ pluginMessage: { type: 'persist-refresh-token', refreshToken: state.refreshToken } }, '*');
+  }
+
+  async function refreshAccessToken() {
+    if (!state.refreshToken) throw new Error('No refresh token');
+    const body = new URLSearchParams({
+      client_id: state.clientId,
+      grant_type: 'refresh_token',
+      refresh_token: state.refreshToken,
+    });
+    const resp = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error('Refresh failed: ' + text);
+    }
+    const data = await resp.json();
+    state.accessToken = data.access_token;
+    state.tokenExpiresAt = Date.now() + (data.expires_in - 30) * 1000;
+    if (data.refresh_token) {
+      state.refreshToken = data.refresh_token;
+      parent.postMessage({ pluginMessage: { type: 'persist-refresh-token', refreshToken: state.refreshToken } }, '*');
+    }
+  }
+
+  async function ensureToken() {
+    if (state.accessToken && Date.now() < state.tokenExpiresAt) return state.accessToken;
+    await refreshAccessToken();
+    return state.accessToken;
+  }
+
+  // -------- Spotify Web API helper --------
+  async function api(path, options = {}) {
+    const token = await ensureToken();
+    const headers = { Authorization: 'Bearer ' + token, ...(options.headers || {}) };
+    // Only set Content-Type when there's a body — Spotify can return weird
+    // parse errors (e.g. "Invalid limit") on GETs that include it unnecessarily.
+    if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    const resp = await fetch('https://api.spotify.com/v1' + path, { ...options, headers });
+    if (resp.status === 204) return null;
+    const ct = resp.headers.get('content-type') || '';
+    const data = ct.includes('application/json') ? await resp.json() : await resp.text();
+    if (!resp.ok) {
+      const msg = (data && data.error && data.error.message) || resp.statusText;
+      throw new Error(msg);
+    }
+    return data;
+  }
+
+  // -------- Connect remote (controls a Spotify device elsewhere) --------
+  // Web Playback SDK can't run in Figma plugin UIs (data: URLs aren't a secure
+  // context, so EME / Widevine isn't available). Instead, we control whatever
+  // Spotify device the user already has running — desktop app, phone, or
+  // open.spotify.com — via the Web API.
+  async function connectRemote() {
+    await refreshDevices();
+    pollPlayerState();
+    startPolling();
+  }
+
+  async function refreshDevices() {
+    try {
+      const data = await api('/me/player/devices');
+      state.devices = (data && data.devices) || [];
+      const active = state.devices.find(d => d.is_active);
+      if (active) {
+        state.deviceId = active.id;
+        state.deviceName = active.name;
+      } else if (state.devices.length) {
+        // Pick first device but don't transfer until the user actually plays.
+        state.deviceId = state.devices[0].id;
+        state.deviceName = state.devices[0].name;
+      } else {
+        state.deviceId = '';
+        state.deviceName = '';
+      }
+      renderDeviceBar();
+      if (!state.devices.length) {
+        showError('player', 'No Spotify devices found. Open Spotify on your phone, desktop, or at open.spotify.com — then tap the device icon below to refresh.');
+      } else {
+        showError('player', '');
+      }
+    } catch (e) {
+      showError('player', 'Couldn’t load devices: ' + e.message);
+    }
+  }
+
+  async function pollPlayerState() {
+    try {
+      const data = await api('/me/player');
+      if (!data || !data.item) {
+        state.currentTrack = null;
+        state.isPlaying = false;
+        state.progressMs = 0;
+        state.durationMs = 0;
+        renderNowPlaying();
+        return;
+      }
+      state.currentTrack = data.item;
+      state.isPlaying = !!data.is_playing;
+      if (!state.seeking) state.progressMs = data.progress_ms || 0;
+      state.durationMs = data.item.duration_ms || 0;
+      if (data.device) {
+        state.deviceId = data.device.id;
+        state.deviceName = data.device.name;
+        if (!state.volumeDragging && typeof data.device.volume_percent === 'number') {
+          state.volume = data.device.volume_percent;
+          const vs = document.getElementById('volume-slider');
+          if (vs) vs.value = String(state.volume);
+        }
+        renderDeviceBar();
+      }
+      renderNowPlaying();
+    } catch (e) {
+      // Silently ignore poll errors — token may be refreshing or network blip.
+    }
+  }
+
+  function startPolling() {
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = setInterval(pollPlayerState, 3000);
+  }
+
+  function stopPolling() {
+    if (state.pollTimer) clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+
+  function deviceQS() {
+    return state.deviceId ? '?device_id=' + encodeURIComponent(state.deviceId) : '';
+  }
+
+  // -------- UI rendering --------
+  function fmtTime(ms) {
+    if (!ms || ms < 0) ms = 0;
+    const s = Math.floor(ms / 1000);
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  }
+
+  function renderNowPlaying() {
+    const t = state.currentTrack;
+    const art = document.getElementById('album-art');
+    const ph = document.getElementById('album-art-placeholder');
+    const name = document.getElementById('track-name');
+    const artist = document.getElementById('track-artist');
+    const playIcon = document.getElementById('icon-play');
+    const pauseIcon = document.getElementById('icon-pause');
+
+    if (t) {
+      const url = (t.album.images[0] && t.album.images[0].url) || '';
+      art.innerHTML = url ? `<img src="${url}" alt="">` : '';
+      if (!url) art.appendChild(ph);
+      name.textContent = t.name;
+      artist.textContent = (t.artists || []).map(a => a.name).join(', ');
+    } else {
+      art.innerHTML = '<span id="album-art-placeholder">No track playing</span>';
+      name.textContent = '—';
+      artist.textContent = '';
+    }
+
+    playIcon.style.display = state.isPlaying ? 'none' : 'block';
+    pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
+
+    renderProgress();
+
+    // Mirror to compact bar
+    const cArt = document.getElementById('compact-art');
+    const cTitle = document.getElementById('compact-title');
+    const cArtist = document.getElementById('compact-artist');
+    const cPlay = document.getElementById('cmp-icon-play');
+    const cPause = document.getElementById('cmp-icon-pause');
+    if (cArt && cTitle && cArtist) {
+      if (t) {
+        const thumb = (t.album.images[2] || t.album.images[1] || t.album.images[0] || {}).url || '';
+        cArt.innerHTML = thumb ? `<img src="${thumb}" alt="">` : '';
+        cTitle.textContent = t.name;
+        cArtist.textContent = (t.artists || []).map(a => a.name).join(', ');
+      } else {
+        cArt.innerHTML = '';
+        cTitle.textContent = 'Nothing playing';
+        cArtist.textContent = '';
+      }
+    }
+    if (cPlay && cPause) {
+      cPlay.style.display = state.isPlaying ? 'none' : 'block';
+      cPause.style.display = state.isPlaying ? 'block' : 'none';
+    }
+  }
+
+  function setCompact(compact) {
+    document.body.classList.toggle('compact', compact);
+    parent.postMessage({ pluginMessage: { type: 'set-compact', compact } }, '*');
+  }
+
+  function renderProgress() {
+    const slider = document.getElementById('progress-slider');
+    const cur = document.getElementById('progress-current');
+    const total = document.getElementById('progress-total');
+    if (total) total.textContent = fmtTime(state.durationMs);
+    if (!state.seeking) {
+      if (slider) {
+        slider.max = String(state.durationMs || 100);
+        slider.value = String(state.progressMs || 0);
+      }
+      if (cur) cur.textContent = fmtTime(state.progressMs);
+    }
+    const cProg = document.getElementById('compact-progress');
+    if (cProg) {
+      const pct = state.durationMs > 0
+        ? Math.max(0, Math.min(100, (state.progressMs / state.durationMs) * 100))
+        : 0;
+      cProg.style.width = pct + '%';
+    }
+  }
+
+  // tick local progress between Spotify polls so the bar is smooth
+  function startProgressTimer() {
+    if (state.progressTimer) clearInterval(state.progressTimer);
+    state.progressTimer = setInterval(() => {
+      if (state.isPlaying && !state.seeking) {
+        state.progressMs = Math.min(state.durationMs, state.progressMs + 500);
+        renderProgress();
+      }
+    }, 500);
+  }
+
+  // -------- Controls --------
+  async function togglePlay() {
+    try {
+      if (!state.deviceId) { await refreshDevices(); }
+      if (!state.deviceId) throw new Error('No active Spotify device.');
+      const path = (state.isPlaying ? '/me/player/pause' : '/me/player/play') + deviceQS();
+      await api(path, { method: 'PUT' });
+      state.isPlaying = !state.isPlaying;
+      renderNowPlaying();
+      setTimeout(pollPlayerState, 400);
+    } catch (e) { showError('player', e.message); }
+  }
+
+  async function nextTrack() {
+    try { await api('/me/player/next' + deviceQS(), { method: 'POST' }); setTimeout(pollPlayerState, 400); }
+    catch (e) { showError('player', e.message); }
+  }
+
+  async function prevTrack() {
+    try { await api('/me/player/previous' + deviceQS(), { method: 'POST' }); setTimeout(pollPlayerState, 400); }
+    catch (e) { showError('player', e.message); }
+  }
+
+  async function setVolume(percent) {
+    try { await api('/me/player/volume?volume_percent=' + Math.round(percent) + '&device_id=' + encodeURIComponent(state.deviceId), { method: 'PUT' }); }
+    catch (e) { /* ignore */ }
+  }
+
+  async function seekTo(ms) {
+    try { await api('/me/player/seek?position_ms=' + Math.round(ms) + (state.deviceId ? '&device_id=' + encodeURIComponent(state.deviceId) : ''), { method: 'PUT' }); }
+    catch (e) { showError('player', e.message); }
+  }
+
+  function bindPlayerControls() {
+    document.getElementById('btn-playpause').onclick = togglePlay;
+    document.getElementById('btn-next').onclick = nextTrack;
+    document.getElementById('btn-prev').onclick = prevTrack;
+
+    const vol = document.getElementById('volume-slider');
+    let volTimer;
+    vol.addEventListener('mousedown', () => { state.volumeDragging = true; });
+    vol.addEventListener('touchstart', () => { state.volumeDragging = true; });
+    vol.addEventListener('input', () => {
+      state.volume = Number(vol.value);
+      clearTimeout(volTimer);
+      volTimer = setTimeout(() => setVolume(state.volume), 150);
+    });
+    vol.addEventListener('change', () => { state.volumeDragging = false; });
+
+    const slider = document.getElementById('progress-slider');
+    slider.addEventListener('mousedown', () => { state.seeking = true; });
+    slider.addEventListener('touchstart', () => { state.seeking = true; });
+    slider.addEventListener('change', async () => {
+      const ms = Number(slider.value);
+      state.progressMs = ms;
+      await seekTo(ms);
+      state.seeking = false;
+      setTimeout(pollPlayerState, 400);
+    });
+
+    document.querySelectorAll('.tab').forEach(t => {
+      t.onclick = () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        const target = t.dataset.tab;
+        document.getElementById('tab-now-playing').classList.toggle('active', target === 'now-playing');
+        document.getElementById('tab-search').classList.toggle('active', target === 'search');
+        if (target === 'search') document.getElementById('search-input').focus();
+      };
+    });
+
+    document.getElementById('btn-signout').onclick = signOut;
+    document.getElementById('btn-devices').onclick = openDevicePicker;
+    document.getElementById('device-picker-close').onclick = () => {
+      document.getElementById('device-picker').style.display = 'none';
+    };
+
+    // Compact-mode toggles + compact-bar controls
+    document.getElementById('btn-compact').onclick = () => setCompact(true);
+    document.getElementById('cmp-expand').onclick = () => setCompact(false);
+    document.getElementById('compact-meta').onclick = () => setCompact(false);
+    document.getElementById('cmp-prev').onclick = prevTrack;
+    document.getElementById('cmp-playpause').onclick = togglePlay;
+    document.getElementById('cmp-next').onclick = nextTrack;
+
+    // Search
+    let searchTimer;
+    const input = document.getElementById('search-input');
+    input.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const q = input.value.trim();
+      if (!q) { document.getElementById('search-results').innerHTML = ''; return; }
+      searchTimer = setTimeout(() => doSearch(q), 250);
+    });
+  }
+
+  function renderDeviceBar() {
+    const bar = document.getElementById('device-bar');
+    if (!bar) return;
+    if (!state.deviceName) {
+      bar.textContent = 'No device';
+    } else {
+      bar.textContent = 'Playing on ' + state.deviceName;
+    }
+  }
+
+  async function openDevicePicker() {
+    await refreshDevices();
+    if (!state.devices.length) return;
+    const overlay = document.getElementById('device-picker');
+    const list = document.getElementById('device-list');
+    list.innerHTML = '';
+    state.devices.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'result';
+      row.innerHTML = `
+        <div class="result-text">
+          <div class="result-name"></div>
+          <div class="result-sub"></div>
+        </div>
+        ${d.is_active ? '<span style="color: var(--accent); font-size:11px;">Active</span>' : ''}
+      `;
+      row.querySelector('.result-name').textContent = d.name;
+      row.querySelector('.result-sub').textContent = d.type + (d.volume_percent != null ? ' • ' + d.volume_percent + '%' : '');
+      row.onclick = async () => {
+        try {
+          await api('/me/player', {
+            method: 'PUT',
+            body: JSON.stringify({ device_ids: [d.id], play: state.isPlaying }),
+          });
+          state.deviceId = d.id;
+          state.deviceName = d.name;
+          renderDeviceBar();
+          overlay.style.display = 'none';
+          setTimeout(pollPlayerState, 400);
+        } catch (e) { showError('player', e.message); }
+      };
+      list.appendChild(row);
+    });
+    overlay.style.display = 'flex';
+  }
+
+  async function doSearch(query) {
+    const container = document.getElementById('search-results');
+    container.innerHTML = '<div class="empty">Searching…</div>';
+    try {
+      // limit defaults to 20 — omitting it sidesteps a Spotify "Invalid limit"
+      // error we were hitting with the param explicitly set.
+      const params = new URLSearchParams({ q: query, type: 'track' });
+      const path = '/search?' + params.toString();
+      console.log('[spotify] search:', path);
+      const data = await api(path);
+      const items = (data.tracks && data.tracks.items) || [];
+      if (!items.length) { container.innerHTML = '<div class="empty">No results.</div>'; return; }
+      container.innerHTML = '';
+      items.forEach(track => {
+        const row = document.createElement('div');
+        row.className = 'result';
+        const img = (track.album.images[2] || track.album.images[0] || {}).url || '';
+        row.innerHTML = `
+          <div class="result-art">${img ? `<img src="${img}" alt="">` : ''}</div>
+          <div class="result-text">
+            <div class="result-name"></div>
+            <div class="result-sub"></div>
+          </div>
+          <button class="icon" title="Play">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+          </button>
+        `;
+        row.querySelector('.result-name').textContent = track.name;
+        row.querySelector('.result-sub').textContent = track.artists.map(a => a.name).join(', ');
+        row.onclick = () => playTrack(track.uri);
+        container.appendChild(row);
+      });
+    } catch (e) {
+      container.innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+    }
+  }
+
+  async function playTrack(uri) {
+    try {
+      if (!state.deviceId) throw new Error('Player not ready yet — give it a second.');
+      await api('/me/player/play?device_id=' + state.deviceId, {
+        method: 'PUT',
+        body: JSON.stringify({ uris: [uri] }),
+      });
+      // Switch to Now Playing tab
+      document.querySelector('.tab[data-tab="now-playing"]').click();
+    } catch (e) {
+      showError('player', e.message);
+    }
+  }
+
+  function signOut() {
+    stopPolling();
+    if (state.progressTimer) { clearInterval(state.progressTimer); state.progressTimer = null; }
+    state.accessToken = '';
+    state.refreshToken = '';
+    state.tokenExpiresAt = 0;
+    state.deviceId = '';
+    state.deviceName = '';
+    state.devices = [];
+    state.currentTrack = null;
+    parent.postMessage({ pluginMessage: { type: 'sign-out' } }, '*');
+    notify('Signed out of Spotify');
+    showView('setup');
+  }
+
+  // -------- Boot / message handling --------
+  document.getElementById('open-spotify-dashboard').onclick = (e) => {
+    e.preventDefault();
+    window.open('https://developer.spotify.com/dashboard', '_blank', 'noopener');
+  };
+
+  document.getElementById('setup-signin').onclick = async () => {
+    if (!state.clientId) {
+      document.getElementById('setup-config').style.display = 'block';
+      showError('setup', 'No Spotify Client ID configured yet — set one below.');
+      return;
+    }
+    showError('setup', '');
+    await startAuthFlow();
+  };
+
+  document.getElementById('setup-toggle-config').onclick = (e) => {
+    e.preventDefault();
+    const cfg = document.getElementById('setup-config');
+    cfg.style.display = cfg.style.display === 'none' ? 'block' : 'none';
+  };
+
+  document.getElementById('setup-save').onclick = async () => {
+    const cid = document.getElementById('client-id').value.trim();
+    if (!cid) { showError('setup', 'Client ID is required.'); return; }
+    state.clientId = cid;
+    state.redirectUri = DEFAULT_REDIRECT_URI;
+    parent.postMessage({ pluginMessage: { type: 'persist-credentials', clientId: cid, redirectUri: DEFAULT_REDIRECT_URI } }, '*');
+    showError('setup', '');
+    await startAuthFlow();
+  };
+
+  document.getElementById('auth-reopen').onclick = () => startAuthFlow();
+  document.getElementById('auth-back').onclick = () => showView('setup');
+
+  document.getElementById('auth-submit').onclick = async () => {
+    const raw = document.getElementById('callback-url').value.trim();
+    if (!raw) { showError('auth', 'Paste the callback URL first.'); return; }
+    let code = '';
+    try {
+      const u = new URL(raw);
+      code = u.searchParams.get('code') || '';
+      const err = u.searchParams.get('error');
+      if (err) throw new Error('Spotify returned: ' + err);
+    } catch (e) {
+      showError('auth', e.message || 'Couldn’t parse that URL.');
+      return;
+    }
+    if (!code) { showError('auth', 'No ?code= parameter found in the URL.'); return; }
+    showError('auth', '');
+    showView('loading');
+    try {
+      await exchangeCodeForToken(code);
+      showView('player');
+      bindPlayerControls();
+      startProgressTimer();
+      await connectRemote();
+      notify('Connected to Spotify');
+    } catch (e) {
+      showError('setup', e.message);
+      showView('setup');
+    }
+  };
+
+  // Receive postMessage from the OAuth callback popup. The callback page
+  // (callback.html on GitHub Pages) is what posts this — never trust messages
+  // from other origins.
+  const EXPECTED_CALLBACK_ORIGIN = (() => {
+    try { return new URL(DEFAULT_REDIRECT_URI).origin; } catch (e) { return ''; }
+  })();
+
+  async function handleAuthCallback(payload) {
+    if (payload.error) {
+      showError('auth', 'Spotify returned: ' + payload.error);
+      return;
+    }
+    if (payload.state && authState && payload.state !== authState) {
+      showError('auth', 'OAuth state mismatch — please try signing in again.');
+      return;
+    }
+    if (!payload.code) {
+      showError('auth', 'No authorization code received.');
+      return;
+    }
+    showError('auth', '');
+    showView('loading');
+    try {
+      await exchangeCodeForToken(payload.code);
+      showView('player');
+      bindPlayerControls();
+      startProgressTimer();
+      await connectRemote();
+      notify('Connected to Spotify');
+    } catch (e) {
+      showError('setup', e.message);
+      showView('setup');
+    }
+  }
+
+  window.addEventListener('message', async (event) => {
+    // Auto-completion path: callback page postMessages the code back.
+    if (event.data && event.data.type === 'spotify-auth-callback') {
+      if (EXPECTED_CALLBACK_ORIGIN && event.origin !== EXPECTED_CALLBACK_ORIGIN) return;
+      await handleAuthCallback(event.data);
+      return;
+    }
+
+    // Receive persisted state from the plugin sandbox on launch.
+    const msg = event.data.pluginMessage;
+    if (!msg) return;
+    if (msg.type === 'state-loaded') {
+      // Hardcoded constant always wins; falls back to anything the user previously saved.
+      state.clientId = DEFAULT_CLIENT_ID || msg.clientId || '';
+      state.redirectUri = DEFAULT_REDIRECT_URI;
+      state.refreshToken = msg.refreshToken || '';
+      state.pendingPlayUri = msg.lastTrackUri || null;
+
+      // Apply persisted compact mode (window is already sized correctly by code.js).
+      document.body.classList.toggle('compact', !!msg.compact);
+
+      // Pre-fill the Client ID input + auto-expand the config form if nothing's set.
+      if (state.clientId) {
+        const inp = document.getElementById('client-id');
+        if (inp) inp.value = state.clientId;
+      } else {
+        document.getElementById('setup-config').style.display = 'block';
+      }
+
+      if (state.refreshToken && state.clientId) {
+        // Returning user — try silent refresh and jump straight into the player.
+        showView('loading');
+        try {
+          await refreshAccessToken();
+          showView('player');
+          bindPlayerControls();
+          startProgressTimer();
+          renderNowPlaying();
+          await connectRemote();
+        } catch (e) {
+          // Refresh token invalid — fall back to setup.
+          showError('setup', 'Session expired — please sign in again.');
+          showView('setup');
+        }
+      } else {
+        showView('setup');
+      }
+    }
+  });
+</script>
+</body>
+</html>

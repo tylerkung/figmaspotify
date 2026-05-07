@@ -1,0 +1,19 @@
+{
+  "name": "Remote for Spotify",
+  "id": "remote-for-spotify-plugin",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": ["figma", "figjam"],
+  "networkAccess": {
+    "allowedDomains": [
+      "https://accounts.spotify.com",
+      "https://api.spotify.com",
+      "https://*.scdn.co",
+      "https://*.spotifycdn.com"
+    ]
+  }
+}
