@@ -469,7 +469,10 @@
   // Leave DEFAULT_CLIENT_ID empty to fall back to the in-UI form.
   // ============================================================
   const DEFAULT_CLIENT_ID = 'ac064209026c4446ad37a6fbe7d9fa84';
-  const DEFAULT_REDIRECT_URI = 'https://tylerkung.github.io/figmaspotify/callback.html';
+  // Update BASE_URL to match your Netlify site if you can't claim figmaspotify.netlify.app.
+  const BASE_URL = 'https://figmaspotify.netlify.app';
+  const DEFAULT_REDIRECT_URI = BASE_URL + '/callback.html';
+  const RELAY_URL = BASE_URL + '/api/auth';
 
   // -------- View routing --------
   const views = ['setup', 'auth', 'player', 'loading'];
@@ -614,8 +617,9 @@
       state: authState,
     });
     const url = 'https://accounts.spotify.com/authorize?' + params.toString();
-    // No `noopener` — we want window.opener to survive in the popup so the
-    // callback page can postMessage the code back automatically.
+    // No `noopener` — keep the opener relationship in case COOP doesn't sever
+    // it (postMessage is the fast path); we also poll the relay as the
+    // reliable fallback for when COOP does sever it.
     try {
       authWindow = window.open(url, 'spotify-auth', 'width=520,height=720');
     } catch (e) {
@@ -623,6 +627,33 @@
       return;
     }
     showView('auth');
+    state.authResolved = false;
+    pollRelayForCode(authState);
+  }
+
+  async function pollRelayForCode(session) {
+    const startedAt = Date.now();
+    const timeoutMs = 4 * 60 * 1000;
+    const intervalMs = 2000;
+    while (Date.now() - startedAt < timeoutMs) {
+      if (state.authResolved) return;
+      await new Promise((r) => setTimeout(r, intervalMs));
+      if (state.authResolved) return;
+      try {
+        const resp = await fetch(RELAY_URL + '?session=' + encodeURIComponent(session));
+        if (resp.status === 200) {
+          const data = await resp.json();
+          if (data && (data.code || data.error)) {
+            await handleAuthCallback({ code: data.code, error: data.error, state: session });
+            return;
+          }
+        } else if (resp.status === 410) {
+          // expired — give up
+          return;
+        }
+        // 404 means pending; keep polling.
+      } catch (e) { /* network blip — keep trying */ }
+    }
   }
 
   async function exchangeCodeForToken(code) {
@@ -1155,7 +1186,9 @@
   })();
 
   async function handleAuthCallback(payload) {
+    if (state.authResolved) return; // already handled via the other channel
     if (payload.error) {
+      state.authResolved = true;
       showError('auth', 'Spotify returned: ' + payload.error);
       return;
     }
@@ -1167,6 +1200,8 @@
       showError('auth', 'No authorization code received.');
       return;
     }
+    state.authResolved = true;
+    try { if (authWindow && !authWindow.closed) authWindow.close(); } catch (e) {}
     showError('auth', '');
     showView('loading');
     try {

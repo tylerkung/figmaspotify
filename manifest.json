@@ -13,7 +13,8 @@
       "https://accounts.spotify.com",
       "https://api.spotify.com",
       "https://*.scdn.co",
-      "https://*.spotifycdn.com"
+      "https://*.spotifycdn.com",
+      "https://figmaspotify.netlify.app"
     ]
   }
 }

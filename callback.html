@@ -30,57 +30,72 @@
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const error = params.get('error');
-    const state = params.get('state');
+    const session = params.get('state'); // we use OAuth `state` as the relay session id
     const titleEl = document.getElementById('title');
     const msgEl = document.getElementById('msg');
 
-    function showFallback(text, isError) {
-      titleEl.textContent = isError ? 'Spotify reported an error' : 'Almost there';
+    function setMessage(title, text, isError) {
+      titleEl.textContent = title;
       msgEl.innerHTML = '';
       const p = document.createElement('p');
-      p.className = isError ? 'err' : '';
+      if (isError) p.className = 'err';
       p.textContent = text;
       msgEl.appendChild(p);
-      const code = document.createElement('code');
-      code.textContent = window.location.href;
-      msgEl.appendChild(code);
-      const hint = document.createElement('p');
-      hint.textContent = 'Copy the URL above and paste it into the Remote for Spotify plugin in Figma.';
-      msgEl.appendChild(hint);
     }
 
-    // Try to deliver the result to the plugin via window.opener.
+    function showManualFallback(reason) {
+      titleEl.textContent = reason ? reason : 'Almost there';
+      msgEl.innerHTML = '';
+      const p = document.createElement('p');
+      p.textContent = 'Copy the URL below and paste it into the Remote for Spotify plugin in Figma.';
+      msgEl.appendChild(p);
+      const c = document.createElement('code');
+      c.textContent = window.location.href;
+      msgEl.appendChild(c);
+    }
+
+    // Best-effort: also try window.opener.postMessage in case COOP didn't sever it.
     if (window.opener && !window.opener.closed) {
       try {
         window.opener.postMessage({
           type: 'spotify-auth-callback',
           code: code || null,
           error: error || null,
-          state: state || null,
+          state: session || null,
         }, '*');
-
-        titleEl.textContent = error ? 'Spotify reported an error' : 'Connected — you can close this tab';
-        msgEl.textContent = error
-          ? ('Error: ' + error)
-          : 'Returning you to Figma…';
-
-        // Auto-close after a short pause so the user sees the success state.
-        setTimeout(function () {
-          try { window.close(); } catch (e) {}
-        }, 600);
-        return;
-      } catch (e) {
-        // postMessage failed (rare); fall through to manual paste.
-      }
+      } catch (e) { /* ignore */ }
     }
 
-    // Fallback: no opener (COOP severed it, or the user landed here directly).
+    // Primary path: POST to the same-site relay so the plugin can poll for it.
+    if (session && (code || error)) {
+      fetch('/api/auth?session=' + encodeURIComponent(session), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: code || null, error: error || null }),
+      }).then(function (resp) {
+        if (resp.ok) {
+          setMessage(
+            error ? 'Spotify reported an error' : 'Connected — you can close this tab',
+            error ? ('Error: ' + error) : 'Returning you to Figma…',
+            !!error
+          );
+          setTimeout(function () { try { window.close(); } catch (e) {} }, 800);
+        } else {
+          showManualFallback('Couldn’t reach the relay');
+        }
+      }).catch(function () {
+        showManualFallback('Couldn’t reach the relay');
+      });
+      return;
+    }
+
+    // No state or no code — user landed here without going through auth.
     if (error) {
-      showFallback('Spotify error: ' + error, true);
-    } else if (code) {
-      showFallback('Auth succeeded but we couldn’t send the result back automatically.', false);
+      setMessage('Spotify reported an error', 'Error: ' + error, true);
+    } else if (!code) {
+      setMessage('Nothing to do', 'No authorization code in the URL.', true);
     } else {
-      showFallback('No authorization code in the URL.', true);
+      showManualFallback('Missing session id');
     }
   })();
 </script>
