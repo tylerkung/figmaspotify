@@ -1,8 +1,8 @@
 // Figma plugin sandbox — bridges UI <-> Figma APIs.
 // All Spotify network + playback work happens in ui.html.
 
-const SIZE_FULL = { width: 360, height: 680 };
-const SIZE_COMPACT = { width: 360, height: 64 };
+const SIZE_FULL = { width: 288, height: 580 };
+const SIZE_COMPACT = { width: 288, height: 64 };
 
 const STORAGE_KEYS = {
   refreshToken: 'spotify.refreshToken',

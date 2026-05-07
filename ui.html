@@ -124,19 +124,19 @@
     gap: 14px;
   }
   .album-art {
-    width: 100%;
-    max-width: 260px;
+    /* Escape #tab-now-playing's 16px padding on top + sides so the artwork
+       runs flush to the window edges. */
+    width: calc(100% + 32px);
     aspect-ratio: 1 / 1;
-    margin: 0 auto;
+    margin: -16px -16px 0;
     background: var(--panel-2);
-    border-radius: 8px;
+    border-radius: 0;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--muted);
     font-size: 11px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   }
   .album-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
@@ -381,19 +381,18 @@
           Spotify
         </h2>
         <div class="header-actions">
+          <button class="icon" id="btn-search" title="Search">
+            <svg id="icon-search-glass" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <svg id="icon-search-close" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
           <button class="icon" id="btn-compact" title="Compact view">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 15 12 9 18 15"/></svg>
-          </button>
-          <button class="icon" id="btn-devices" title="Devices">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </button>
           <button class="icon" id="btn-signout" title="Sign out">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
           </button>
         </div>
       </div>
-      <div id="device-bar" style="padding: 4px 16px 8px; font-size: 11px; color: var(--accent);">No device</div>
-
       <div id="device-picker" style="display:none; position:absolute; inset:0; background: rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index: 10;">
         <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; width: 88%; max-height: 70%; overflow-y: auto;">
           <div class="row between" style="margin-bottom: 8px;">
@@ -402,11 +401,6 @@
           </div>
           <div id="device-list" class="results"></div>
         </div>
-      </div>
-
-      <div class="tabs">
-        <button class="tab active" data-tab="now-playing">Now Playing</button>
-        <button class="tab" data-tab="search">Search</button>
       </div>
 
       <div id="player-error" style="padding: 0 16px;"></div>
@@ -445,6 +439,8 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color: var(--muted);"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0014 8.07v7.86A4.49 4.49 0 0016.5 12z"/></svg>
             <input type="range" id="volume-slider" min="0" max="100" value="60">
           </div>
+
+          <div id="device-bar" title="Switch device" style="font-size: 11px; color: var(--accent); text-align: center; margin-top: 4px; cursor: pointer;">No device</div>
         </div>
       </div>
 
@@ -874,6 +870,14 @@
     parent.postMessage({ pluginMessage: { type: 'set-compact', compact } }, '*');
   }
 
+  function toggleSearch(show) {
+    document.getElementById('tab-now-playing').classList.toggle('active', !show);
+    document.getElementById('tab-search').classList.toggle('active', show);
+    document.getElementById('icon-search-glass').style.display = show ? 'none' : 'block';
+    document.getElementById('icon-search-close').style.display = show ? 'block' : 'none';
+    if (show) setTimeout(() => document.getElementById('search-input').focus(), 50);
+  }
+
   function renderProgress() {
     const slider = document.getElementById('progress-slider');
     const cur = document.getElementById('progress-current');
@@ -966,19 +970,13 @@
       setTimeout(pollPlayerState, 400);
     });
 
-    document.querySelectorAll('.tab').forEach(t => {
-      t.onclick = () => {
-        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        const target = t.dataset.tab;
-        document.getElementById('tab-now-playing').classList.toggle('active', target === 'now-playing');
-        document.getElementById('tab-search').classList.toggle('active', target === 'search');
-        if (target === 'search') document.getElementById('search-input').focus();
-      };
-    });
+    document.getElementById('btn-search').onclick = () => {
+      const showing = document.getElementById('tab-search').classList.contains('active');
+      toggleSearch(!showing);
+    };
 
     document.getElementById('btn-signout').onclick = signOut;
-    document.getElementById('btn-devices').onclick = openDevicePicker;
+    document.getElementById('device-bar').onclick = openDevicePicker;
     document.getElementById('device-picker-close').onclick = () => {
       document.getElementById('device-picker').style.display = 'none';
     };
@@ -1092,8 +1090,7 @@
         method: 'PUT',
         body: JSON.stringify({ uris: [uri] }),
       });
-      // Switch to Now Playing tab
-      document.querySelector('.tab[data-tab="now-playing"]').click();
+      toggleSearch(false);
     } catch (e) {
       showError('player', e.message);
     }
